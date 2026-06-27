@@ -131,3 +131,7 @@ performance-test.js
 .claude/
 .claude.json
 .codacy/
+
+# Hardhat
+artifacts/
+cache/
