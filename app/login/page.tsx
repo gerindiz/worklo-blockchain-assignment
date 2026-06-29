@@ -1,18 +1,18 @@
 'use client';
 import { apiFetch } from '@/lib/api-config';
-
 import { Suspense, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/hooks/useAuth';
 import { RoleSelectLogin } from '@/components/role-select-login';
+import { EmailPasswordLogin } from '@/components/email-password-login';
 import { isSupabaseConfigured } from '@/lib/supabase';
 
 export default function Page() {
   const { user, userProfile, loading } = useAuth();
   const router = useRouter();
   const supabaseReady = isSupabaseConfigured();
+  const demoMode = process.env.NEXT_PUBLIC_DEMO_MODE === 'true';
 
-  // Check for first-run (no users) and redirect to onboarding
   useEffect(() => {
     if (!supabaseReady) return;
     apiFetch('/api/onboarding/check-first-run')
@@ -26,12 +26,8 @@ export default function Page() {
   }, [router, supabaseReady]);
 
   useEffect(() => {
-    // Wait for auth to finish loading before checking
     if (loading) return;
-
-    // If user is already authenticated, redirect appropriately
     if (user) {
-      // Client users go to client portal
       if (userProfile && (userProfile as any).is_client) {
         router.replace('/client-portal');
       } else {
@@ -40,7 +36,6 @@ export default function Page() {
     }
   }, [user, userProfile, loading, router]);
 
-  // Show loading state while checking auth
   if (loading) {
     return (
       <div className="flex min-h-svh w-full items-center justify-center bg-[#080B0F] p-6 md:p-10">
@@ -52,7 +47,6 @@ export default function Page() {
     );
   }
 
-  // If user is authenticated, show loading while redirecting
   if (user) {
     return (
       <div className="flex min-h-svh w-full items-center justify-center bg-[#080B0F] p-6 md:p-10">
@@ -66,33 +60,15 @@ export default function Page() {
 
   return (
     <div className="grid-bg flex min-h-svh w-full items-center justify-center bg-[#080B0F] p-6 md:p-10">
-      <div className="w-full max-w-2xl">
-        {/* Show setup instructions when database is not configured */}
+      <div className="w-full max-w-md">
         {!supabaseReady && (
           <div className="mb-6 rounded-lg border border-yellow-500/20 bg-yellow-500/5 p-4">
             <h2 className="mb-2 text-sm font-semibold text-yellow-400">Database Not Connected</h2>
-            <p className="mb-3 text-sm text-yellow-400/70">
-              Supabase is not configured. To get started:
-            </p>
-            <ol className="list-inside list-decimal space-y-1 text-sm text-yellow-400/70">
-              <li>
-                Copy{' '}
-                <code className="rounded bg-yellow-500/10 px-1 text-xs">.env.local.template</code>{' '}
-                to <code className="rounded bg-yellow-500/10 px-1 text-xs">.env.local</code>
-              </li>
-              <li>Add your Supabase cloud project URL and keys</li>
-              <li>
-                Run <code className="rounded bg-yellow-500/10 px-1 text-xs">npm run dev</code>
-              </li>
-            </ol>
-            <p className="mt-3 text-xs text-yellow-400/50">
-              See the README for detailed setup instructions.
-            </p>
+            <p className="text-sm text-yellow-400/70">Supabase is not configured.</p>
           </div>
         )}
-
         <Suspense fallback={<div className="text-sm text-[#8B9BB4]">Loading...</div>}>
-          <RoleSelectLogin />
+          {demoMode ? <RoleSelectLogin /> : <EmailPasswordLogin />}
         </Suspense>
       </div>
     </div>

@@ -1,157 +1,174 @@
 ﻿# Worklo Blockchain Assignment — Germán Rindizbacher
 
-Implementación de un sistema de recompensas en blockchain (ERC-20) para tareas completadas en la plataforma Worklo, sobre un nodo local de Hardhat.
+ERC-20 reward system for completed tasks in Worklo, running on a local Hardhat node. Full end-to-end flow: smart contract → API route → UI with loading/success/error states.
 
 ---
 
-## 🚀 Cómo correr el proyecto
+## ✅ Status: end-to-end working
 
-### Prerequisitos
+Submitted an initial version with the contract, API route, and clean documentation. **Came back to the repo after the deadline to finish the frontend wiring** (Reward button with loading/success/error states), now complete and tested locally.
+
+![Reward button — success state](docs/reward-flow-working.png)
+
+---
+
+## 🚀 How to run
+
+### Prereqs
 - Node.js 18+
-- Una cuenta gratuita de Supabase
+- A free Supabase project
 
-### 1. Instalar dependencias
+### 1. Install dependencies
 ```bash
 npm install
 ```
 
-### 2. Configurar variables de entorno
-Copiá el template y completalo con tus credenciales:
+### 2. Configure environment variables
 ```bash
 cp .env.local.template .env.local
 ```
 
-Variables requeridas (las de blockchain ya están con los defaults canónicos de Hardhat):
+Fill in `.env.local`:
 
 ```dotenv
 # Supabase
-NEXT_PUBLIC_SUPABASE_URL=https://<tu-proyecto>.supabase.co
-NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY=<tu-anon-key>
-SUPABASE_SERVICE_ROLE_KEY=<tu-service-role-key>
+NEXT_PUBLIC_SUPABASE_URL=https://<your-project>.supabase.co
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY=<your-anon-key>
+SUPABASE_SERVICE_ROLE_KEY=<your-service-role-key>
 
-# Blockchain (Hardhat local)
+# Setup wizard (first-run only)
+SETUP_SECRET=<generate-with-node--e-require_crypto_randomBytes_32_toString_hex>
+
+# Blockchain (Hardhat local defaults)
 HARDHAT_RPC_URL=http://127.0.0.1:8545
 OWNER_PRIVATE_KEY=0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
 WPT_CONTRACT_ADDRESS=0x5FbDB2315678afecb367f032d93F642f64180aa3
 REWARD_RECIPIENT_ADDRESS=0x70997970C51812dc3A010C7d01b50e0d17dc79C8
+
+# Demo mode off so the real email/password login is used
+NEXT_PUBLIC_DEMO_MODE=false
 ```
 
-### 3. Cargar el schema en Supabase
-Supabase Dashboard → SQL Editor → pegar y ejecutar:
+### 3. Load the Supabase schema
+Supabase Dashboard → SQL Editor → paste and run:
 - `supabase/schema.sql`
 - `supabase/seed-roles.sql`
-- Adicional: `ALTER TABLE tasks ADD COLUMN IF NOT EXISTS tx_hash TEXT;`
+- Then: `ALTER TABLE tasks ADD COLUMN IF NOT EXISTS tx_hash TEXT;`
 
-### 4. Iniciar el nodo local de Hardhat (terminal 1)
+### 4. Start the Hardhat node (terminal 1)
 ```bash
 npx hardhat node
 ```
-Dejá esta terminal corriendo. Imprime 20 cuentas con private keys que se usan localmente sin riesgo real.
+Keep it running.
 
-### 5. Desplegar el contrato (terminal 2, una sola vez)
+### 5. Deploy the contract (terminal 2, once)
 ```bash
 npx hardhat run scripts/deploy.js --network localhost
 ```
-Copiá la dirección que imprime y verificá que coincida con `WPT_CONTRACT_ADDRESS` en `.env.local`.
+Confirm the address matches `WPT_CONTRACT_ADDRESS`.
 
-### 6. Iniciar Next.js (terminal 3)
+### 6. Start Next.js (terminal 3)
 ```bash
 npm run dev
 ```
-La app queda disponible en http://localhost:3000
+
+### 7. First-time setup
+- Open `http://localhost:3000` → onboarding wizard
+- Get the setup token by calling `GET /api/onboarding/setup-token` (token is logged to the dev console; also stored in `setup_tokens` table)
+- Complete the wizard to create your superadmin
+- Log in with the email/password you set
+
+### 8. Try the reward flow
+- Create an account, a project, and a task with `status = 'done'` (via UI or SQL)
+- Open the project detail page
+- Click **"Reward WPT"** next to the completed task
+- Watch the Hardhat node terminal: `WorkloToken#mint` is called, tx mined
+- The button transitions to a green **"Rewarded 0x738c…679f"** badge
+- The `tx_hash` is persisted in `tasks.tx_hash`
 
 ---
 
-## ✅ Qué está implementado
+## ✅ What's implemented
 
-### 1. Smart Contract (`contracts/WorkloToken.sol`)
-ERC-20 mínimo basado en OpenZeppelin:
-- Hereda de `ERC20` y `Ownable`
-- Nombre: `Worklo Platform Token`, símbolo: `WPT`
-- Función `mint(address to, uint256 amount)` restringida con `onlyOwner`
-- Compatible con Solidity ^0.8.20 y OpenZeppelin v5 (constructor de Ownable recibe el owner inicial)
+### 1. Smart contract (`contracts/WorkloToken.sol`)
+Minimal ERC-20 using OpenZeppelin v5:
+- Inherits `ERC20` and `Ownable`
+- Name: "Worklo Platform Token", symbol: "WPT"
+- `mint(address to, uint256 amount)` restricted by `onlyOwner`
+- Solidity ^0.8.20
 
-### 2. Script de deploy (`scripts/deploy.js`)
-Desplega el contrato al nodo local de Hardhat usando `ethers` v6 e imprime la dirección final.
+### 2. Deploy script (`scripts/deploy.js`)
+Deploys to the local Hardhat node using ethers v6 and prints the contract address.
 
-### 3. Ruta API (`app/api/tasks/[taskId]/reward/route.js`)
-Endpoint `POST /api/tasks/[taskId]/reward` que sigue **exactamente el patrón** de `app/api/roles/route.js`:
+### 3. API route (`app/api/tasks/[taskId]/reward/route.js`)
+`POST /api/tasks/[taskId]/reward` — follows the existing pattern of `app/api/roles/route.js`:
 
-- Mismo estilo CommonJS (`require` / `exports.POST`)
-- Auth con `requireAuthAndPermission(Permission.MANAGE_TASKS, {}, request)`
-- Logging consistente (`logger`, `apiCall`, `apiResponse`, `databaseQuery`)
-- Manejo de errores con `handleGuardError`
-- Dos clientes Supabase: `createApiSupabaseClient` para reads (respeta RLS) y `createAdminSupabaseClient` para el update del `tx_hash` (bypass RLS)
+- CommonJS exports (matches the rest of the codebase)
+- Auth via `requireAuthAndPermission(Permission.MANAGE_TASKS, {}, request)`
+- Structured logging via `logger`, `apiCall`, `apiResponse`, `databaseQuery`
+- Error handling via `handleGuardError` (consistent with other routes)
+- Dual Supabase clients: `createApiSupabaseClient` for reads (RLS respected), `createAdminSupabaseClient` for the `tx_hash` write (bypasses RLS as the system actor)
 
-Flujo del handler:
+Flow:
 1. Auth + permission check
-2. Fetch de la task por `taskId` (params async, como pide Next.js 15)
-3. Validación: la task tiene que existir y tener `status` completado (`done` / `completed`)
-4. Anti-doble-mint: si la task ya tiene `tx_hash`, devuelve 400 con el hash existente
-5. Setup de `ethers.JsonRpcProvider` + `Wallet` (owner key) + `Contract` con ABI mínimo
-6. Llama `mint(REWARD_RECIPIENT, 10 * 10^decimals)` y espera el receipt
-7. Guarda el `tx_hash` en `tasks` con el `adminClient`
-8. Devuelve `{ txHash }`
+2. Async `params` (Next.js 15 breaking change)
+3. Fetch task by id and validate `status ∈ {done, completed}`
+4. Idempotency: refuse if `tx_hash` already set
+5. ethers v6 setup with `JsonRpcProvider` + `Wallet(OWNER_KEY)` + minimal ABI (`mint`, `decimals`)
+6. `mint(REWARD_RECIPIENT, 10 * 10^decimals)` and wait for receipt
+7. Persist `tx_hash` via the admin client
+8. Return `{ txHash }`
 
-Manejo de errores específico para `ECONNREFUSED` / `NETWORK_ERROR` con mensaje accionable ("Hardhat node not reachable").
+Specific catch for `ECONNREFUSED`/`NETWORK_ERROR` returns `503` with the actionable message "Hardhat node not reachable", so the user sees a real explanation instead of a generic 500.
 
----
+### 4. UI: `RewardButton` (`components/reward-button.tsx`)
+Standalone, reusable component. Renders next to every task with `status === 'done'` in the project detail page.
 
-## 🚧 Qué NO terminé y por qué
+Three states (matching the assignment requirements):
+- **idle**: amber button "Reward WPT" with coin icon
+- **loading**: same button disabled with spinner + "Minting…"
+- **success**: green badge "Rewarded 0xabcd…1234" (truncated tx hash, monospaced)
+- **error**: red "Retry" button with the actual error in the tooltip
 
-### Frontend del botón "Recompensar WPT"
-**Estado**: la API funciona end-to-end (contrato desplegado, mint exitoso, escritura en Supabase). Falta terminar de pulir los tres estados del botón (loading / success / error) integrados con el componente real del proyecto.
+On mount, the component checks `initialTxHash`. If the task already has a hash in Supabase, it starts directly in success state — so the badge survives page reloads.
 
-**Por qué**: el repo viene con `NEXT_PUBLIC_DEMO_MODE=true` y la mayoría de los datos del dashboard (proyectos, tareas, deadlines) son mock hardcoded del frontend, no consultas reales a Supabase. La task "Optimizar Smart Contract..." que aparece en el dashboard tiene un id tipo `task-demo-blockchain-1` (string), mientras que la tabla `tasks` de Supabase usa `uuid`. Conectar el botón end-to-end requería decidir entre:
+Defensive fetch handling: `res.json().catch(() => ({ error: 'Invalid JSON response' }))` and `if (!res.ok) throw new Error(data.error || HTTP ${res.status})` — no more cryptic `Unexpected token '<', "<!DOCTYPE..."` errors when the backend returns HTML.
 
-1. Insertar una task real en Supabase con UUID y modificar el mock data del frontend para usarlo (toca código que la consigna pide minimizar)
-2. Cambiar `tasks.id` de uuid a text (rompe FKs con `subtasks`, `task_comments`, etc.)
-3. Adaptar el handler para que funcione "sin task de Supabase" si la consulta falla (rompe la consigna que pide explícitamente "fetch the task")
-
-Preferí dejar el handler **alineado con la consigna y el patrón del codebase** y documentar este punto en lugar de hackear el frontend.
-
-### Manejo de errores defensivo en el frontend
-El componente que usa `apiFetch` hace `r.json()` directo sin chequear `res.ok` ni catchear si la respuesta no es JSON. Esto produce el clásico error `Unexpected token '<', "<!DOCTYPE..."` cuando el backend devuelve HTML (404/500). Lo dejé documentado para arreglar:
-
-```ts
-const res = await apiFetch(`/api/tasks/${taskId}/reward`, { method: 'POST' });
-const data = await res.json().catch(() => ({ error: 'Invalid JSON response' }));
-if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-return data.txHash;
-```
+### 5. Misc fixes made along the way
+- `app/login/page.tsx`: when `NEXT_PUBLIC_DEMO_MODE=false`, render a real email/password form instead of the seeded-user role picker. Lets you log in with the superadmin created in the onboarding wizard.
+- `components/email-password-login.tsx`: new login form, reuses the existing `signInWithEmail` from `lib/auth.ts`.
+- `lib/animation-variants.ts`: a couple of dashboard widgets imported `fadeInUp` / `staggerContainer` / `listItemFadeUp` from a file that didn't exist in the repo. Added minimal Framer Motion variants so the dashboard renders without build errors.
 
 ---
 
-## 🔮 Qué mejoraría con más tiempo
+## 🔮 What I'd improve with more time
 
-1. **Conectar el mock data del demo con Supabase real**: hacer un seed script (`supabase/seed-demo.sql`) que inserte un proyecto y 2-3 tasks con UUIDs estables, y reemplazar las constantes del mock del dashboard para que apunten a esos UUIDs. Así el botón funciona end-to-end con el demo, sin necesitar que el evaluador cree datos manualmente.
+1. **Per-task reward amount**: hardcoded 10 WPT today. Add `tasks.reward_amount` (default 10) so different tasks can be worth different amounts — fits the PSA model where tasks have different weight.
 
-2. **Hacer el monto del reward configurable por task**: actualmente el handler mintea 10 WPT fijos. Lo extendería con una columna `tasks.reward_amount` (default 10) y leería ese valor en el handler, así distintas tareas pueden tener distintas recompensas (alineado con el modelo PSA de Worklo donde tareas tienen distinto peso).
+2. **Per-user recipient resolution**: the recipient is a fixed env address today. In a real system each user would have a `user_profiles.wallet_address`; the route would mint to the wallet of the task's `assigned_to`, with the env address as a fallback.
 
-3. **Recipient dinámico por usuario**: hoy el reward va a una dirección fija de `.env`. En un sistema real cada usuario tendría su wallet asociada a su perfil. Agregaría `user_profiles.wallet_address` y mintearía a la wallet del `assigned_to` de la task, con fallback al `REWARD_RECIPIENT_ADDRESS` de env si la wallet del usuario no está seteada.
+3. **Stronger idempotency**: today the route does `SELECT tx_hash → if null → mint → UPDATE`. There's a small race window between the SELECT and the UPDATE. I'd close it with an atomic claim: `UPDATE tasks SET tx_hash = 'pending' WHERE id = $id AND tx_hash IS NULL RETURNING *`, then mint, then write the real hash; revert the claim on failure. For a production-grade version, a separate `reward_transactions` table with `(pending | confirmed | failed)` states and confirmations.
 
-4. **Idempotencia más robusta**: la guarda actual contra doble-mint chequea `task.tx_hash` antes de mintear, pero hay una pequeña ventana de carrera entre el SELECT y el UPDATE. Lo cerraría con un `UPDATE ... WHERE tx_hash IS NULL` antes del mint (claim atómico) y revertiría si el mint falla. Para una versión profesional, además usaría una tabla `reward_transactions` con estados (`pending` / `confirmed` / `failed`) y `confirmations` para esperar más bloques.
+4. **Tests**: contract tests with Hardhat (owner can mint, non-owner reverts, totalSupply increases), plus an integration test for the route against an ephemeral Hardhat instance.
 
-5. **Frontend states**: implementar el botón con los 3 estados que pide la consigna usando un hook custom `useRewardTask(taskId)` que devuelva `{ reward, isLoading, txHash, error }`. Un componente puro `<RewardButton task={task} />` que se autocontiene y se puede dropear junto a cualquier task completada.
+5. **Observability**: log `receipt.blockNumber`, `receipt.gasUsed`, `receipt.effectiveGasPrice` for auditing and cost tracking. Critical for real-network deployments.
 
-6. **Tests**: unit tests del contrato con Hardhat (`onlyOwner` previene un non-owner, `mint` actualiza balance), y un test de integración del route con un nodo Hardhat embebido en un test runner.
+6. **Key management**: `OWNER_PRIVATE_KEY` in `.env.local` is fine for local Hardhat. In production it should live in a KMS (AWS KMS, GCP Secret Manager) or a remote signer like OpenZeppelin Defender Relay or Fireblocks — never as a server env var.
 
-7. **Observabilidad blockchain**: agregar al `logger` el `blockNumber` y `gasUsed` del receipt para poder auditar costos y latencia. En producción con red real esto sería clave.
-
-8. **Seguridad de keys**: la `OWNER_PRIVATE_KEY` en `.env.local` está bien para desarrollo local con Hardhat. En staging/producción la movería a un KMS (AWS KMS, GCP Secret Manager) o un signer remoto tipo Fireblocks/Defender Relay, nunca como variable de entorno en el servidor.
+7. **Block explorer link**: the badge currently truncates the hash. I'd make it a link to a block explorer when running against a real network (and to a local node UI if anything like that is available for Hardhat).
 
 ---
 
-## 🛠️ Stack utilizado
+## 🛠️ Stack
 
-- **Smart contract**: Solidity ^0.8.20, OpenZeppelin Contracts v5
-- **Blockchain dev**: Hardhat con nodo local
-- **Backend**: Next.js 15 (App Router), ethers.js v6
-- **Database**: Supabase (PostgreSQL gestionado)
-- **Auth**: patrón existente del codebase (`requireAuthAndPermission` con cookies parseadas del request)
-- **Logging**: logger del codebase (`@/lib/debug-logger`)
+- **Smart contract**: Solidity ^0.8.20, OpenZeppelin v5
+- **Blockchain**: Hardhat 2.x local node
+- **Backend**: Next.js 15 App Router, ethers v6
+- **DB**: Supabase (Postgres + Auth)
+- **Auth**: existing codebase pattern (`requireAuthAndPermission`)
+- **Logging**: existing codebase logger (`@/lib/debug-logger`)
 
 ---
 
-**Autor**: Germán Rindizbacher  
-**Contacto**: grindiz1989@gmail.com · GitHub: [gerindiz](https://github.com/gerindiz)
+**Author**: Germán Rindizbacher  
+**Contact**: grindiz1989@gmail.com · GitHub: [gerindiz](https://github.com/gerindiz)

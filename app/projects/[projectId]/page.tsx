@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ArrowLeft, Calendar, Clock, Users, FolderOpen } from 'lucide-react';
 import { format } from 'date-fns';
+import { RewardButton } from '@/components/reward-button';
 
 interface Project {
   id: string;
@@ -32,6 +33,7 @@ interface Task {
   priority: string;
   due_date: string | null;
   assigned_to: string | null;
+  tx_hash: string | null;
   user_profiles?: { name: string } | null;
 }
 
@@ -79,7 +81,7 @@ export default function ProjectDetailPage() {
         const { data: taskData } = await supabase
           .from('tasks')
           .select(
-            'id, name, status, priority, due_date, assigned_to, user_profiles:assigned_to(name)',
+            'id, name, status, priority, due_date, assigned_to, tx_hash, user_profiles:assigned_to(name)',
           )
           .eq('project_id', projectId)
           .order('created_at', { ascending: false });
@@ -226,6 +228,9 @@ export default function ProjectDetailPage() {
                       <Badge className={PRIORITY_COLORS[task.priority] || ''} variant="outline">
                         {task.priority}
                       </Badge>
+                      {task.status === 'done' && (
+                        <RewardButton taskId={task.id} initialTxHash={task.tx_hash} />
+                      )}
                     </div>
                   </div>
                 ))}
